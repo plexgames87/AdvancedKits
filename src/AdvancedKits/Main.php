@@ -66,27 +66,75 @@ class Main extends PluginBase{
 
     public function onCommand(CommandSender $sender, Command $command, string $label, array $args) : bool{
         switch(strtolower($command->getName())){
-            case 'kit':
-                if(!($sender instanceof Player)){
-                    $sender->sendMessage($this->langManager->getTranslation('in-game'));
-                    return true;
-                }
-                if(!isset($args[0])){
-                    $kits = (bool)$this->getConfig()->get('hide-no-perm-kits', false) ? array_filter($this->kits, function (Kit $kit) use($sender){return $kit->testPermission($sender);}) : $this->kits;
-                    if($this->formAPIInstance === null){
-                        $sender->sendMessage($this->langManager->getTranslation('av-kits', implode(', ', array_keys($kits))));
-                    }else{
-                        $this->openKitUI($sender, $kits);
-                    }
-                    return true;
-                }
-                $kit = $this->getKit($args[0]);
-                if($kit === null){
-                    $sender->sendMessage($this->langManager->getTranslation('no-kit', $args[0]));
-                    return true;
-                }
-                $kit->handleRequest($sender);
-                return true;
+			case "kit":
+				if(!($sender instanceof Player)){
+					$sender->sendMessage($this->langManager->getTranslation("in-game"));
+					return true;
+				}
+				if(!isset($args[0])){
+					$sender->sendMessage($this->langManager->getTranslation("av-kits", implode(", ", array_keys($this->kits))));
+					return true;
+				}
+				$kit = $this->getKit($args[0]);
+				if($kit === null){
+					$sender->sendMessage($this->langManager->getTranslation("no-kit", $args[0]));
+					return true;
+				}
+				//$kit->handleRequest($sender);
+				$player = $sender;
+				if($kit->testPermission($player) || $player->isOp()){
+					if(!isset($kit->coolDowns[strtolower($player->getName())])){
+						if(!($this->getConfig()->get("one-kit-per-life") and isset($this->hasKit[strtolower($player->getName())]))){
+							if($kit->cost){
+								if($this->economy->grantKit($player, $kit->cost)){
+									$chest = Item::get(Item::CHEST, 25, 1);
+									$nbt = $chest->getNamedTag();
+									$nbt->setString("kit", $kit->getName());
+									$chest->setNamedTag($nbt);
+									$chest->setCustomName(TextFormat::RESET . TextFormat::BOLD . TextFormat::DARK_GRAY . "[" . TextFormat::GOLD . "+" . TextFormat::DARK_GRAY . "] " . TextFormat::GOLD . $kit->getName() . " Kit " . TextFormat::DARK_GRAY . "[" . TextFormat::GOLD . "+" . TextFormat::DARK_GRAY . "]" . TextFormat::RESET);
+									$chest->setLore([
+										"",
+										TextFormat::GRAY . "Tap Anywhere To Redeem",
+										TextFormat::GRAY . "A Container That Contains The " . $kit->getName() . " Kit",
+										"",
+										TextFormat::RED . "Be Sure To Clear Your Inventory Use This In /wild",
+									]);
+									$sender->getInventory()->addItem($chest);
+									$player->sendMessage($this->langManager->getTranslation("sel-kit", $this->name));
+									return true;
+								}else{
+									$player->sendMessage($this->langManager->getTranslation("cant-afford", $this->name));
+								}
+							}else{
+								$chest = Item::get(Item::CHEST, 25, 1);
+								$nbt = $chest->getNamedTag();
+								$nbt->setString("kit", $kit->getName());
+								$chest->setNamedTag($nbt);
+								$chest->setCustomName(TextFormat::RESET . TextFormat::BOLD . TextFormat::DARK_GRAY . "[" . TextFormat::GOLD . "+" . TextFormat::DARK_GRAY . "] " . TextFormat::GOLD . $kit->getName() . " Kit " . TextFormat::DARK_GRAY . "[" . TextFormat::GOLD . "+" . TextFormat::DARK_GRAY . "]" . TextFormat::RESET);
+								$chest->setLore([
+									"",
+									TextFormat::GRAY . "Tap Anywhere To Redeem",
+									TextFormat::GRAY . "A Container That Contains The " . $kit->getName() . " Kit",
+									"",
+									TextFormat::RED . "Be Sure To Clear Your Inventory Use This In /wild",
+								]);
+								$sender->getInventory()->addItem($chest);
+								$player->sendMessage($this->langManager->getTranslation("sel-kit", $kit->name));
+							}
+							if($kit->coolDown > 0){
+								$kit->coolDowns[strtolower($player->getName())] = $kit->coolDown;
+							}
+						}else{
+							$player->sendMessage($this->langManager->getTranslation("one-per-life"));
+						}
+					}else{
+						$player->sendMessage($this->langManager->getTranslation("cooldown1", $kit->name));
+						$player->sendMessage($this->langManager->getTranslation("cooldown2", $kit->getCoolDownLeft($player)));
+					}
+				}else{
+					$player->sendMessage($this->langManager->getTranslation("no-perm", $kit->name));
+				}
+				return true;
             case 'akreload':
                 foreach($this->kits as $kit){
                     $kit->save();
